@@ -165,32 +165,26 @@ const elevator = {
           });
 
           if (this.dispatcher.upButtonPressed.size && this.getIsGoingUp()) {
-            const highestFloor = Array.from(this.dispatcher.upButtonPressed)
-              .sort((a, b) => a - b)
-              .pop();
-            this.addStop(highestFloor);
-            this.dispatcher.upButtonPressed.delete(highestFloor);
+            this.addHighestStopFromDispatcher();
           } else if (this.dispatcher.downButtonPressed.size && !this.getIsGoingUp()) {
-            const lowestFloor = Array.from(this.dispatcher.downButtonPressed)
-              .sort((a, b) => a - b)
-              .shift();
-            this.addStop(lowestFloor);
-            this.dispatcher.downButtonPressed.delete(lowestFloor);
+            this.addLowestStopFromDispatcher();
           } else if (this.dispatcher.upButtonPressed.size) {
-            const highestFloor = Array.from(this.dispatcher.upButtonPressed)
-              .sort((a, b) => a - b)
-              .pop();
-            this.addStop(highestFloor);
-            this.dispatcher.upButtonPressed.delete(highestFloor);
+            this.addHighestStopFromDispatcher();
           } else if (this.dispatcher.downButtonPressed.size) {
-            const lowestFloor = Array.from(this.dispatcher.downButtonPressed)
-              .sort((a, b) => a - b)
-              .shift();
-            this.addStop(lowestFloor);
-            this.dispatcher.downButtonPressed.delete(lowestFloor);
+            this.addLowestStopFromDispatcher();
           }
           this.goToNextStop();
         });
+      }
+
+      addHighestStopFromDispatcher() {
+        const highestFloor = this.dispatcher.dispatchHighest();
+        this.addStop(highestFloor);
+      }
+
+      addLowestStopFromDispatcher() {
+        const lowestFloor = this.dispatcher.dispatchLowest();
+        this.addStop(lowestFloor);
       }
     }
 
@@ -213,6 +207,18 @@ const elevator = {
             this.downButtonPressed.add(floor.floorNum());
           });
         });
+      }
+
+      dispatchHighest() {
+        const highest = Array.from(this.upButtonPressed).sort((a, b) => a - b).pop();
+        this.upButtonPressed.delete(highest);
+        return highest;
+      }
+
+      dispatchLowest() {
+        const lowest = Array.from(this.downButtonPressed).sort((a, b) => a - b).shift();
+        this.downButtonPressed.delete(lowest);
+        return lowest;
       }
     }
 
