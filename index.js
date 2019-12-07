@@ -119,7 +119,6 @@ const elevator = {
       elevator.goingUpIndicator(true);
       return new ElevatorCtl(elevator);
     });
-    var elevatorCtrl = elevatorControllers[0];
 
     const floorUpPressed = new Set();
     const floorDownPressed = new Set();
@@ -133,71 +132,80 @@ const elevator = {
       });
     });
 
-    elevatorCtrl.elevator.on("passing_floor", function(floorNum, direction) {
-      const shouldStopWhenGoingDown =
-        elevatorCtrl.elevator.goingDownIndicator() &&
-        direction === "down" &&
-        floorDownPressed.has(floorNum);
+    elevatorControllers.forEach(elevatorCtrl => {
+      elevatorCtrl.elevator.on("passing_floor", function(floorNum, direction) {
+        const shouldStopWhenGoingDown =
+          elevatorCtrl.elevator.goingDownIndicator() &&
+          direction === "down" &&
+          floorDownPressed.has(floorNum);
 
-      const shouldStopWhenGoingUp =
-        elevatorCtrl.elevator.goingUpIndicator() &&
-        direction === "up" &&
-        floorUpPressed.has(floorNum);
+        const shouldStopWhenGoingUp =
+          elevatorCtrl.elevator.goingUpIndicator() &&
+          direction === "up" &&
+          floorUpPressed.has(floorNum);
 
-      if (shouldStopWhenGoingDown) {
-        elevatorCtrl.elevator.goToFloor(floorNum, true);
-        floorDownPressed.delete(floorNum);
-      }
+        if (shouldStopWhenGoingDown) {
+          elevatorCtrl.elevator.goToFloor(floorNum, true);
+          floorDownPressed.delete(floorNum);
+        }
 
-      if (shouldStopWhenGoingUp) {
-        elevatorCtrl.elevator.goToFloor(floorNum, true);
-        floorUpPressed.delete(floorNum);
-      }
-    });
-
-    elevatorCtrl.elevator.on("floor_button_pressed", function(floorNum) {
-      elevatorCtrl.addFloorToStop(floorNum);
-      console.log(
-        "on elevator floor button press",
-        floorNum,
-        elevatorCtrl.floorToStop,
-      );
-    });
-
-    elevatorCtrl.elevator.on("stopped_at_floor", function(floorNum) {
-      console.log("stopped");
-      // Maybe decide where to go next?
-      elevatorCtrl.removeFloorToStop(floorNum);
-      elevatorCtrl.elevator.getPressedFloors().forEach(floorNum => {
-        elevatorCtrl.addFloorToStop(floorNum);
+        if (shouldStopWhenGoingUp) {
+          elevatorCtrl.elevator.goToFloor(floorNum, true);
+          floorUpPressed.delete(floorNum);
+        }
       });
-      elevatorCtrl.goToNextFloor();
-    });
 
-    elevatorCtrl.elevator.on("idle", function() {
-      console.log("idle", elevatorCtrl.floorToStop);
-      elevatorCtrl.elevator.getPressedFloors().forEach(floorNum => {
+      elevatorCtrl.elevator.on("floor_button_pressed", function(floorNum) {
         elevatorCtrl.addFloorToStop(floorNum);
-      });
-      if (floorUpPressed.size && elevatorCtrl.isGoingUp()) {
-        const highestFloor = Array.from(floorUpPressed)
-          .sort((a, b) => a - b)
-          .pop();
-        elevatorCtrl.addFloorToStop(highestFloor);
-      } else if (floorDownPressed.size && !elevatorCtrl.isGoingUp()) {
-        const lowestFloor = Array.from(floorDownPressed)
-          .sort((a, b) => a - b)
-          .shift();
-        elevatorCtrl.addFloorToStop(lowestFloor);
-      } else if (floorUpPressed.size || floorDownPressed.size) {
-        elevatorCtrl.addFloorToStop(
-          [
-            ...Array.from(floorUpPressed),
-            ...Array.from(floorDownPressed),
-          ].pop(),
+        console.log(
+          "on elevator floor button press",
+          floorNum,
+          elevatorCtrl.floorToStop,
         );
-      }
-      elevatorCtrl.goToNextFloor();
+      });
+
+      elevatorCtrl.elevator.on("stopped_at_floor", function(floorNum) {
+        console.log("stopped");
+        // Maybe decide where to go next?
+        elevatorCtrl.removeFloorToStop(floorNum);
+        elevatorCtrl.elevator.getPressedFloors().forEach(floorNum => {
+          elevatorCtrl.addFloorToStop(floorNum);
+        });
+        elevatorCtrl.goToNextFloor();
+      });
+
+      elevatorCtrl.elevator.on("idle", function() {
+        console.log("idle", elevatorCtrl.floorToStop);
+        elevatorCtrl.elevator.getPressedFloors().forEach(floorNum => {
+          elevatorCtrl.addFloorToStop(floorNum);
+        });
+        if (floorUpPressed.size && elevatorCtrl.isGoingUp()) {
+          const highestFloor = Array.from(floorUpPressed)
+            .sort((a, b) => a - b)
+            .pop();
+          elevatorCtrl.addFloorToStop(highestFloor);
+          floorUpPressed.delete(highestFloor);
+        } else if (floorDownPressed.size && !elevatorCtrl.isGoingUp()) {
+          const lowestFloor = Array.from(floorDownPressed)
+            .sort((a, b) => a - b)
+            .shift();
+          elevatorCtrl.addFloorToStop(lowestFloor);
+          floorDownPressed.delete(lowestFloor);
+        } else if (floorUpPressed.size) {
+          const highestFloor = Array.from(floorUpPressed)
+            .sort((a, b) => a - b)
+            .pop();
+          elevatorCtrl.addFloorToStop(highestFloor);
+          floorUpPressed.delete(highestFloor);
+        } else if (floorDownPressed.size) {
+          const lowestFloor = Array.from(floorDownPressed)
+            .sort((a, b) => a - b)
+            .shift();
+          elevatorCtrl.addFloorToStop(lowestFloor);
+          floorDownPressed.delete(lowestFloor);
+        }
+        elevatorCtrl.goToNextFloor();
+      });
     });
   },
   update: function(dt, elevators, floors) {
