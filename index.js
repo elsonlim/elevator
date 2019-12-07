@@ -7,6 +7,11 @@ const elevator = {
         this.elevator = elevator;
         this.stops = new Set();
         this.setIsGoingUp(true);
+        this.dispatcher = null;
+      }
+
+      setDispatcher(dispatcher) {
+        this.dispatcher = dispatcher;
       }
 
       setIsGoingUp(isGoingUp) {
@@ -112,6 +117,81 @@ const elevator = {
           console.log("Method: goToNextFloor, Status: No stops");
         }
       }
+
+      initPassingFloorEvent() {
+        this.elevator.on("passing_floor", (floorNum, direction) => {
+          const shouldStopWhenGoingDown =
+            this.elevator.goingDownIndicator() &&
+            direction === "down" &&
+            this.dispatcher.downButtonPressed.has(floorNum);
+
+          const shouldStopWhenGoingUp =
+            this.elevator.goingUpIndicator() &&
+            direction === "up" &&
+            this.dispatcher.upButtonPressed.has(floorNum);
+
+          if (shouldStopWhenGoingDown) {
+            this.elevator.goToFloor(floorNum, true);
+            this.dispatcher.downButtonPressed.delete(floorNum);
+          }
+
+          if (shouldStopWhenGoingUp) {
+            this.elevator.goToFloor(floorNum, true);
+            this.dispatcher.upButtonPressed.delete(floorNum);
+          }
+        });
+      }
+
+      initFloorButtonPressedEvent() {
+        this.elevator.on("floor_button_pressed", (floorNum) => {
+          this.addStop(floorNum);
+        });
+      }
+
+      initStoppedAtFloorEvent() {
+        this.elevator.on("stopped_at_floor", (floorNum) => {
+          this.removeStop(floorNum);
+          this.elevator.getPressedFloors().forEach(floorNum => {
+            this.addStop(floorNum);
+          });
+          this.goToNextStop();
+        });
+      }
+
+      initIdleEvent() {
+        this.elevator.on("idle", () => {
+          this.elevator.getPressedFloors().forEach(floorNum => {
+            this.addStop(floorNum);
+          });
+
+          if (this.dispatcher.upButtonPressed.size && this.getIsGoingUp()) {
+            const highestFloor = Array.from(this.dispatcher.upButtonPressed)
+              .sort((a, b) => a - b)
+              .pop();
+            this.addStop(highestFloor);
+            this.dispatcher.upButtonPressed.delete(highestFloor);
+          } else if (this.dispatcher.downButtonPressed.size && !this.getIsGoingUp()) {
+            const lowestFloor = Array.from(this.dispatcher.downButtonPressed)
+              .sort((a, b) => a - b)
+              .shift();
+            this.addStop(lowestFloor);
+            this.dispatcher.downButtonPressed.delete(lowestFloor);
+          } else if (this.dispatcher.upButtonPressed.size) {
+            const highestFloor = Array.from(this.dispatcher.upButtonPressed)
+              .sort((a, b) => a - b)
+              .pop();
+            this.addStop(highestFloor);
+            this.dispatcher.upButtonPressed.delete(highestFloor);
+          } else if (this.dispatcher.downButtonPressed.size) {
+            const lowestFloor = Array.from(this.dispatcher.downButtonPressed)
+              .sort((a, b) => a - b)
+              .shift();
+            this.addStop(lowestFloor);
+            this.dispatcher.downButtonPressed.delete(lowestFloor);
+          }
+          this.goToNextStop();
+        });
+      }
     }
 
     class FloorDispatcher {
@@ -137,85 +217,20 @@ const elevator = {
     }
 
     const floorDispatcher = new FloorDispatcher(floors);
-    const elevatorControllers = elevators.map(
-      elevator => new ElevatorCtl(elevator),
-    );
+    const elevatorControllers = elevators.map(elevator => {
+      const elev = new ElevatorCtl(elevator);
+      elev.setDispatcher(floorDispatcher);
+      return elev;
+    });
 
     elevatorControllers.forEach(elevatorCtrl => {
-      elevatorCtrl.elevator.on("passing_floor", function(floorNum, direction) {
-        const shouldStopWhenGoingDown =
-          elevatorCtrl.elevator.goingDownIndicator() &&
-          direction === "down" &&
-          floorDispatcher.downButtonPressed.has(floorNum);
-
-        const shouldStopWhenGoingUp =
-          elevatorCtrl.elevator.goingUpIndicator() &&
-          direction === "up" &&
-          floorDispatcher.upButtonPressed.has(floorNum);
-
-        if (shouldStopWhenGoingDown) {
-          elevatorCtrl.elevator.goToFloor(floorNum, true);
-          floorDispatcher.downButtonPressed.delete(floorNum);
-        }
-
-        if (shouldStopWhenGoingUp) {
-          elevatorCtrl.elevator.goToFloor(floorNum, true);
-          floorDispatcher.upButtonPressed.delete(floorNum);
-        }
-      });
-
-      elevatorCtrl.elevator.on("floor_button_pressed", function(floorNum) {
-        elevatorCtrl.addStop(floorNum);
-        console.log(
-          "on elevator floor button press",
-          floorNum,
-          elevatorCtrl.floorToStop,
-        );
-      });
-
-      elevatorCtrl.elevator.on("stopped_at_floor", function(floorNum) {
-        console.log("stopped");
-        elevatorCtrl.removeStop(floorNum);
-        elevatorCtrl.elevator.getPressedFloors().forEach(floorNum => {
-          elevatorCtrl.addStop(floorNum);
-        });
-        elevatorCtrl.goToNextStop();
-      });
-
-      elevatorCtrl.elevator.on("idle", function() {
-        console.log("idle", elevatorCtrl.floorToStop);
-        elevatorCtrl.elevator.getPressedFloors().forEach(floorNum => {
-          elevatorCtrl.addStop(floorNum);
-        });
-        if (floorDispatcher.upButtonPressed.size && elevatorCtrl.getIsGoingUp()) {
-          const highestFloor = Array.from(floorDispatcher.upButtonPressed)
-            .sort((a, b) => a - b)
-            .pop();
-          elevatorCtrl.addStop(highestFloor);
-          floorDispatcher.upButtonPressed.delete(highestFloor);
-        } else if (floorDispatcher.downButtonPressed.size && !elevatorCtrl.getIsGoingUp()) {
-          const lowestFloor = Array.from(floorDispatcher.downButtonPressed)
-            .sort((a, b) => a - b)
-            .shift();
-          elevatorCtrl.addStop(lowestFloor);
-          floorDispatcher.downButtonPressed.delete(lowestFloor);
-        } else if (floorDispatcher.upButtonPressed.size) {
-          const highestFloor = Array.from(floorDispatcher.upButtonPressed)
-            .sort((a, b) => a - b)
-            .pop();
-          elevatorCtrl.addStop(highestFloor);
-          floorDispatcher.upButtonPressed.delete(highestFloor);
-        } else if (floorDispatcher.downButtonPressed.size) {
-          const lowestFloor = Array.from(floorDispatcher.downButtonPressed)
-            .sort((a, b) => a - b)
-            .shift();
-          elevatorCtrl.addStop(lowestFloor);
-          floorDispatcher.downButtonPressed.delete(lowestFloor);
-        }
-        elevatorCtrl.goToNextStop();
-      });
+      elevatorCtrl.initPassingFloorEvent();
+      elevatorCtrl.initFloorButtonPressedEvent();
+      elevatorCtrl.initStoppedAtFloorEvent();
+      elevatorCtrl.initIdleEvent();
     });
   },
+
   update: function(dt, elevators, floors) {
     // We normally don't need to do anything here
   },
