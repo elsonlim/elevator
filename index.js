@@ -3,16 +3,17 @@ const elevator = {
     const MAX_LEVEL = floors.length - 1;
 
     class ElevatorCtl {
-      constructor(elevator) {
+      constructor(id, elevator) {
+        this.id;
         this.elevator = elevator;
         this.stops = new Set();
         this.setIsGoingUp(true);
         this.dispatcher = null;
       }
 
-      getStatus() {
+      getStatus(methodName = "getStatus") {
         console.log(
-          "Method: getSatus",
+          `Status on: ${methodName}`,
           `currentFloor: ${this.getCurrentFloor()}`,
           `isGoingUp ${this.getIsGoingUp()}`,
           `stops ${this.getStops()}`,
@@ -99,14 +100,7 @@ const elevator = {
       }
 
       goToNextStop() {
-        console.log(
-          "Method: goToNextStop, Current Floor: ",
-          this.getCurrentFloor(),
-          "Going Up: ",
-          this.elevator.goingUpIndicator(),
-          "Going Down: ",
-          this.elevator.goingDownIndicator(),
-        );
+        this.getStatus("goToNextStop");
 
         if (this.getCurrentFloor() === 0) {
           this.setIsGoingUp(true);
@@ -136,7 +130,8 @@ const elevator = {
             `floorNum: ${floorNum}`,
             `direction: ${direction}`,
           );
-          this.getStatus();
+          this.getStatus("passing_floor");
+
           const shouldStopWhenGoingDown =
             !this.getIsGoingUp() &&
             direction === "down" &&
@@ -162,7 +157,7 @@ const elevator = {
       initFloorButtonPressedEvent() {
         this.elevator.on("floor_button_pressed", floorNum => {
           console.log("Event: floor_button_pressed", `floorNum: ${floorNum}`);
-          this.getStatus();
+          this.getStatus("floor_button_pressed");
           this.addStop(floorNum);
         });
       }
@@ -170,7 +165,7 @@ const elevator = {
       initStoppedAtFloorEvent() {
         this.elevator.on("stopped_at_floor", floorNum => {
           console.log("Event: stopped_at_floor", `floorNum: ${floorNum}`);
-          this.getStatus();
+          this.getStatus("stopped_at_floor");
           this.removeStop(floorNum);
           this.elevator.getPressedFloors().forEach(floorNum => {
             this.addStop(floorNum);
@@ -182,26 +177,41 @@ const elevator = {
       initIdleEvent() {
         this.elevator.on("idle", () => {
           console.log("Event: idle");
-          this.getStatus();
+          this.getStatus("idle");
 
-          const shouldGoHigher =
+          const shouldPickHigherGoingUp =
             this.dispatcher.containsHigherFloorGoingUp(
               this.getCurrentFloor(),
             ) && this.getIsGoingUp();
 
-          const shouldGoLower =
+          const shouldPickHigherGoingDown =
+            this.dispatcher.containsHigherFloorGoingDown(
+              this.getCurrentFloor(),
+            ) && this.getIsGoingUp();
+
+          const shouldPickLowerGoingDown =
             this.dispatcher.containsLowerFloorGoingDown(
               this.getCurrentFloor(),
             ) && !this.getIsGoingUp();
 
-          if (shouldGoHigher) {
+          const shouldPickLowerGoingUp =
+            this.dispatcher.containsLowerFloorGoingUp(this.getCurrentFloor()) &&
+            !this.getIsGoingUp();
+
+          if (shouldPickHigherGoingUp) {
             this.addHighestStopGoingUpFromDispatcher();
-          } else if (shouldGoLower) {
+          } else if (shouldPickLowerGoingDown) {
             this.addLowestStopGoingDownFromDispatcher();
+          } else if (shouldPickHigherGoingDown) {
+            this.addHighestStopGoingDownFromDispatcher();
+          } else if (shouldPickLowerGoingUp) {
+            this.addLowestStopGoingUpFromDispatcher();
           } else if (this.dispatcher.upButtonPressed.size) {
             this.addLowestStopGoingUpFromDispatcher();
           } else if (this.dispatcher.downButtonPressed.size) {
             this.addHighestStopGoingDownFromDispatcher();
+          } else {
+            this.setIsGoingUp(!this.getIsGoingUp());
           }
           this.goToNextStop();
         });
@@ -273,14 +283,32 @@ const elevator = {
         if (this.upButtonPressed.size === 0) {
           return false;
         }
-        this.getUpButtonPressed().filter(num => num > floorToCompare);
+        return !!this.getUpButtonPressed().filter(num => num > floorToCompare)
+          .length;
+      }
+
+      containsLowerFloorGoingUp(floorToCompare) {
+        if (this.upButtonPressed.size === 0) {
+          return false;
+        }
+        return !!this.getUpButtonPressed().filter(num => num < floorToCompare)
+          .length;
+      }
+
+      containsHigherFloorGoingDown(floorToCompare) {
+        if (this.downButtonPressed.size === 0) {
+          return false;
+        }
+        return !!this.getDownButtonPressed().filter(num => num > floorToCompare)
+          .length;
       }
 
       containsLowerFloorGoingDown(floorToCompare) {
         if (this.downButtonPressed.size === 0) {
           return false;
         }
-        this.getDownButtonPressed().filter(num => num < floorToCompare);
+        return !!this.getDownButtonPressed().filter(num => num < floorToCompare)
+          .length;
       }
 
       getUpButtonPressed() {
@@ -317,8 +345,8 @@ const elevator = {
     }
 
     const floorDispatcher = new FloorDispatcher(floors);
-    const elevatorControllers = elevators.map(elevator => {
-      const elev = new ElevatorCtl(elevator);
+    const elevatorControllers = elevators.map((elevator, i) => {
+      const elev = new ElevatorCtl(`ID${i}`, elevator);
       elev.setDispatcher(floorDispatcher);
       return elev;
     });
