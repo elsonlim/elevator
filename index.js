@@ -4,7 +4,7 @@ const elevator = {
 
     class ElevatorCtl {
       constructor(id, elevator) {
-        this.id;
+        this.id = id;
         this.elevator = elevator;
         this.stops = new Set();
         this.setIsGoingUp(true);
@@ -102,6 +102,10 @@ const elevator = {
       goToNextStop() {
         this.getStatus("goToNextStop");
 
+        if (this.stops.has(this.getCurrentFloor())) {
+          this.removeStop(this.getCurrentFloor());
+        }
+
         if (this.getCurrentFloor() === 0) {
           this.setIsGoingUp(true);
           return this.goToNextUpperStop();
@@ -127,20 +131,23 @@ const elevator = {
         this.elevator.on("passing_floor", (floorNum, direction) => {
           console.log(
             "Event: passing_floor",
+            `id: ${this.id}`,
             `floorNum: ${floorNum}`,
             `direction: ${direction}`,
           );
           this.getStatus("passing_floor");
 
+          const isElevatorFull = this.elevator.loadFactor() === 1;
+
           const shouldStopWhenGoingDown =
             !this.getIsGoingUp() &&
-            direction === "down" &&
-            this.dispatcher.containsFloorGoingDown(floorNum);
+            this.dispatcher.containsFloorGoingDown(floorNum) &&
+            !isElevatorFull;
 
           const shouldStopWhenGoingUp =
             this.getIsGoingUp() &&
-            direction === "up" &&
-            this.dispatcher.containsFloorGoingUp(floorNum);
+            this.dispatcher.containsFloorGoingUp(floorNum) &&
+            !isElevatorFull;
 
           if (shouldStopWhenGoingDown) {
             this.elevator.goToFloor(floorNum, true);
@@ -159,7 +166,47 @@ const elevator = {
           console.log("Event: floor_button_pressed", `floorNum: ${floorNum}`);
           this.getStatus("floor_button_pressed");
           this.addStop(floorNum);
+          this.goToNextStop();
         });
+      }
+
+      onIdleAction() {
+        const shouldPickHigherGoingUp =
+          this.dispatcher.containsHigherFloorGoingUp(this.getCurrentFloor()) &&
+          this.getIsGoingUp() &&
+          this.stops.size === 0;
+
+        const shouldPickHigherGoingDown =
+          this.dispatcher.containsHigherFloorGoingDown(
+            this.getCurrentFloor(),
+          ) &&
+          this.getIsGoingUp() &&
+          this.stops.size === 0;
+
+        const shouldPickLowerGoingDown =
+          this.dispatcher.containsLowerFloorGoingDown(this.getCurrentFloor()) &&
+          !this.getIsGoingUp() &&
+          this.stops.size === 0;
+
+        const shouldPickLowerGoingUp =
+          this.dispatcher.containsLowerFloorGoingUp(this.getCurrentFloor()) &&
+          !this.getIsGoingUp() &&
+          this.stops.size === 0;
+
+        if (shouldPickHigherGoingUp) {
+          this.addHighestStopGoingUpFromDispatcher();
+        } else if (shouldPickLowerGoingDown) {
+          this.addLowestStopGoingDownFromDispatcher();
+        } else if (shouldPickHigherGoingDown) {
+          this.addHighestStopGoingDownFromDispatcher();
+        } else if (shouldPickLowerGoingUp) {
+          this.addLowestStopGoingUpFromDispatcher();
+        } else if (this.dispatcher.upButtonPressed.size) {
+          this.addLowestStopGoingUpFromDispatcher();
+        } else if (this.dispatcher.downButtonPressed.size) {
+          this.addHighestStopGoingDownFromDispatcher();
+        }
+        this.goToNextStop();
       }
 
       initStoppedAtFloorEvent() {
@@ -170,7 +217,8 @@ const elevator = {
           this.elevator.getPressedFloors().forEach(floorNum => {
             this.addStop(floorNum);
           });
-          this.goToNextStop();
+
+          this.onIdleAction();
         });
       }
 
@@ -178,42 +226,18 @@ const elevator = {
         this.elevator.on("idle", () => {
           console.log("Event: idle");
           this.getStatus("idle");
+          console.log(this.id % 2);
 
-          const shouldPickHigherGoingUp =
-            this.dispatcher.containsHigherFloorGoingUp(
-              this.getCurrentFloor(),
-            ) && this.getIsGoingUp();
-
-          const shouldPickHigherGoingDown =
-            this.dispatcher.containsHigherFloorGoingDown(
-              this.getCurrentFloor(),
-            ) && this.getIsGoingUp();
-
-          const shouldPickLowerGoingDown =
-            this.dispatcher.containsLowerFloorGoingDown(
-              this.getCurrentFloor(),
-            ) && !this.getIsGoingUp();
-
-          const shouldPickLowerGoingUp =
-            this.dispatcher.containsLowerFloorGoingUp(this.getCurrentFloor()) &&
-            !this.getIsGoingUp();
-
-          if (shouldPickHigherGoingUp) {
-            this.addHighestStopGoingUpFromDispatcher();
-          } else if (shouldPickLowerGoingDown) {
-            this.addLowestStopGoingDownFromDispatcher();
-          } else if (shouldPickHigherGoingDown) {
-            this.addHighestStopGoingDownFromDispatcher();
-          } else if (shouldPickLowerGoingUp) {
-            this.addLowestStopGoingUpFromDispatcher();
-          } else if (this.dispatcher.upButtonPressed.size) {
-            this.addLowestStopGoingUpFromDispatcher();
-          } else if (this.dispatcher.downButtonPressed.size) {
-            this.addHighestStopGoingDownFromDispatcher();
+          if (this.hasHigherStops() && this.hasLowerStops()) {
+            this.onIdleAction();
           } else {
-            this.setIsGoingUp(!this.getIsGoingUp());
+            if (this.id % 2 === 0) {
+              this.addStop(0);
+            } else {
+              this.addStop(MAX_LEVEL);
+            }
+            this.goToNextStop();
           }
-          this.goToNextStop();
         });
       }
 
@@ -346,7 +370,8 @@ const elevator = {
 
     const floorDispatcher = new FloorDispatcher(floors);
     const elevatorControllers = elevators.map((elevator, i) => {
-      const elev = new ElevatorCtl(`ID${i}`, elevator);
+      console.log("elevator init with id", i);
+      const elev = new ElevatorCtl(i, elevator);
       elev.setDispatcher(floorDispatcher);
       return elev;
     });
